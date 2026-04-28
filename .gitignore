@@ -1,0 +1,6 @@
+# Claude Code config
+.claude/settings.local.json
+
+# Generated output files
+results/*
+!results/.gitkeep

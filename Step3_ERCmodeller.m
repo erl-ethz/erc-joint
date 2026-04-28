@@ -57,7 +57,7 @@ y_interp = interp1(cumDist, XY_mm(2,:), evenDist, 'linear');
 XY_mm_interp = [x_interp; y_interp]; % cam contour with equally spaced points along the curve
 
 XYZ = [XY_mm_interp; zeros(1,length(XY_mm_interp))];
-filename = 'cam_profile.sldcrv';
+filename = 'results/cam_profile.sldcrv';
 fid = fopen(filename, 'w');
 
 % Write as: x y z, one point per row
@@ -105,7 +105,7 @@ concavetoothall = [concavetoothall.*[1 -1 1]' concavetoothall.*[1 -1 -1]']; % co
 %% generating AutoCAD .scr script
 % ERC with convex tooth
 toothall = convextoothall; % initialise with convex tooth
-filename = 'convex.scr';
+filename = 'results/convex.scr';
 if sensorised == 1
     ERCscr_sensorised_convex_potentiometer % generate the AutoCAD .scr script
 else
@@ -114,7 +114,7 @@ end
 
 % ERC with concave tooth
 toothall = concavetoothall; % initialise with concave tooth
-filename = 'concave.scr';
+filename = 'results/concave.scr';
 Rtooth = Rtooth+Rtooth_tolerance; 
 if sensorised == 1
     ERCscr_sensorised_concave % generate the AutoCAD .scr script
