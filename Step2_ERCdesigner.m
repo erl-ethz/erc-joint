@@ -18,7 +18,7 @@ Lmax = 0.04; % Spring max length (m), including the length of coupler (if sensor
 % k = 1480;  % N/m
 % k = 6000;  % N/m
 k = 1750; 
-D_L_max = 0.012; % Spring max elongation (Tmax/k) (m)
+D_L_max = 0.0125; % Spring max elongation (Tmax/k) (m)
 Tmax = D_L_max * k * n_spring; % Spring max tension * no. of springs (N)
 Tmin = 0.8 * n_spring; % Spring tension at rest * no. of springs (N), default = 0
 
