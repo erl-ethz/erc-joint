@@ -11,8 +11,8 @@ clear% =========================================================================
 % =========================================================================
 
 %% Input 1/2: Design parameters
-SF = 2; % Target Safety Factor (SF), default = 2
-n_spring = 2; % Number of springs
+SF = 1.5; % Target Safety Factor (SF), default = 2
+n_spring = 1; % Number of springs
 sensorised = 0; % Does the ERC has integrated angular sensor (potentiometer)? 1->Y, 0->N
 L_coupler = 3; % Length of coupler for senrorised ERC
 dtheta = 0.1*pi/180; % Resolution of cam design, default = 0.1*pi/180
@@ -64,9 +64,9 @@ threshold = 0.1;
 slope = 1.;
 % theta_lim = [-6 77.92];
 theta_lim = [-6 77.92];
-Theta_EA=[-2.5*threshold/slope threshold/slope 25 75.92 theta_lim(2)]/2*pi/180;
+Theta_EA=[-2.5*threshold/slope threshold/slope 30 75.92 theta_lim(2)]/2*pi/180;
 % M_EA=-[1.0 threshold -threshold 0 0 -1.0];
-M_EA=-1.8*[2.5*threshold -threshold 0 0 -2.5*threshold];
+M_EA=-[2.5*threshold -threshold 0 0 -2.5*threshold];
 
 % plot(Theta_EA*2,M_EA)
 % hold off
