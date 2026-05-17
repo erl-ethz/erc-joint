@@ -170,8 +170,8 @@ This example:
 - builds a bistable function-defined ERC profile,
 - runs ERC scaling and convexity repair,
 - writes repaired torque tables and CAD-oriented cam exports,
-- generates a local config for [`erc_isaac/joint_response.py`](/home/luca/workspaces/ERC-joint-dev/erc_isaac/joint_response.py:1),
-- calls [`scripts/convert_concentrated_urdf_yaw_only.py`](/home/luca/workspaces/ERC-joint-dev/scripts/convert_concentrated_urdf_yaw_only.py:1) if the yaw-only USD is missing,
+- generates a local config for [`erc_isaac/joint_response.py`](erc_isaac/joint_response.py),
+- calls [`scripts/convert_concentrated_urdf_yaw_only.py`](scripts/convert_concentrated_urdf_yaw_only.py) if the yaw-only USD is missing,
 - recolors the resulting asset so non-folding arms, folding arms, and motors are easier to distinguish,
 - keeps generated videos and analytics outputs under this repository's `results/` tree,
 - exposes `--headless`, `--video`, `--analytics`, `--analytics_path`, and `--analytics_fps`,
@@ -264,10 +264,10 @@ Choosing a larger safety factor improves matching accuracy at the cost of larger
 
 ## Contributors
 
-- Rui Wu (`@wurui1991`): original ERC repository and MATLAB workflow.
-- Luca Girardi (`@lucagirardi`): Python port, repair-oriented updates, Isaac integration, and documentation updates.
-- Gabriel Maquignaz (`@gabmaquignaz`): Python, repair-oriented, and integration-related updates.
-- Etor Arza Gonzalez (`@EtorArza`): downstream simulation and airframe-integration contributions.
+- Rui Wu ([@wurui1991](https://github.com/wurui1991)): original ERC repository and MATLAB workflow.
+- Luca Girardi ([@lucagirardi](https://github.com/lucagirardi)): Python port, repair-oriented updates, Isaac integration, and documentation updates.
+- Gabriel Maquignaz ([@gabmaquignaz](https://github.com/gabmaquignaz)): Python, repair-oriented, and integration-related updates.
+- Etor Arza Gonzalez ([@EtorArza](https://github.com/EtorArza)): downstream simulation and airframe-integration contributions.
 
 ## Citation
 
