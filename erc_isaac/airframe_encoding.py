@@ -176,23 +176,6 @@ class Airframe:
         actual_values = [self._params[name] for name in PARAM_NAMES]
         return np.array(self._normalize_params(actual_values))
 
-    def with_updated_params(self, updates: dict[str, float]) -> Airframe:
-        """Return new Airframe with updated parameters.
-
-        Args:
-            updates: Dict of parameter names and new values
-
-        Returns:
-            New Airframe instance with updated parameters
-        """
-        new_params = self._params.copy()
-        new_params.update(updates)
-        return Airframe(new_params)
-
-    def _invalidate_cache(self) -> None:
-        """Invalidate cached computations."""
-        self._cached_json_data = None
-
     def compute_total_mass(self) -> float:
         """Compute total mass of the airframe."""
         arm_width = AIRFRAME_CONSTANTS['arm_width']

@@ -51,7 +51,6 @@ class MorphySimulator:
         self._load_drone_parameters()
         if self.has_soft_joints:
             self._build_joint_torque_functions()
-        self._initialize_rotor_dynamics()
         self._compute_robot_mass()
         print(f'[MorphySimulator] Initialized with {n_envs} environments, dt={dt}s, gravity={gravity}, motor_model={motor_model}, has_soft_joints={self.has_soft_joints}')
 
@@ -355,3 +354,4 @@ class MorphySimulator:
         self.scene.reset()
         self.sim.clear_all_callbacks()
         self.sim.clear_instance()
+        self._joint_track_step += 1
