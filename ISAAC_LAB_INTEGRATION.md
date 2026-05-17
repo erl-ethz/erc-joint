@@ -1,7 +1,174 @@
 # ERC Python API Reference
 
-This note documents the public inputs and outputs of the new Python ERC design
-utilities.
+This note documents the Python ERC workflow only. The original MATLAB workflow
+now lives under [`matlab/`](matlab) and is documented separately in
+[`matlab/README.md`](matlab/README.md).
+
+The MATLAB and Python implementations are alternative entrypoints. Use this
+document when you want the torch-native API and the Isaac Lab-facing wrappers.
+
+## High-Level Helpers
+
+The repository now also exposes a small integration layer for common
+simulation-facing operations:
+
+```python
+from erc_design import (
+    build_erc_design,
+    build_erc_design_from_function,
+    build_erc_torque_table,
+    build_erc_torque_table_from_function,
+)
+```
+
+`build_erc_design(...)`
+  Accepts torque knots as `(angle_deg, torque_nm)` pairs, loads the selected
+  spring from the YAML catalog, runs the standard joint-angle ERC design
+  pipeline, and returns an `ERCDesignResult`.
+
+`build_erc_torque_table(...)`
+  Runs the same pipeline and returns only the output torque table with columns
+  `[joint_angle_rad, torque_nm]`.
+
+`build_erc_design_from_function(...)`
+  Accepts a `FunctionTorqueProfileConfig`, discretizes the requested torque
+  function, negates it into the internal ERC sign convention, and then runs
+  the full ERC design pipeline including repair.
+
+  Optional argument:
+  `max_torque_rmse_nm`
+    Raise an error if the repaired ERC torque deviates from the requested
+    profile by more than this RMSE threshold.
+
+`build_erc_torque_table_from_function(...)`
+  Returns only the repaired Isaac-ready torque table derived from a
+  function-defined torque law.
+
+`torque_table_to_function_string(...)`
+  Serializes a generated torque table into a torch-callable Python function
+  string for downstream pipelines that expect inline code instead of a tensor.
+
+## Function-Defined Profiles
+
+For bistable or otherwise analytic profiles, the repository exposes:
+
+```python
+from erc_design import FunctionTorqueProfileConfig, build_function_profile
+```
+
+Supported function modes are:
+
+```text
+sin
+cos
+tan
+expression
+saturating_dual_stiffness
+```
+
+Example:
+
+```python
+from erc_design import (
+    FunctionTorqueProfileConfig,
+    build_erc_torque_table_from_function,
+)
+
+table = build_erc_torque_table_from_function(
+    FunctionTorqueProfileConfig(
+        name="expression",
+        expression="-0.4 * sin(2*pi*theta) - 0.1 * tan(theta * 0.96)",
+        angle_min_rad=-1.48,
+        angle_max_rad=1.48,
+        num_samples=400,
+    ),
+)
+```
+
+This is the preferred way to port a function-defined programmable-joint law
+from Isaac Lab into a realizable ERC approximation, because the output is
+always passed through ERC energy scaling and convexity repair before export.
+
+Sign convention note:
+
+- define the input function in the same sign convention you want in Isaac Lab,
+- do not negate it manually,
+- the integration helpers negate it internally before calling `ERCDesigner`,
+- the exported `output_torque_table` is again Isaac-facing.
+
+## External Joint-Response Simulation
+
+The example script
+
+```python
+examples/erc_bistable_isaaclab_example.py
+```
+
+does not implement a separate local mock simulator. Instead, it prepares a
+repaired ERC response and then launches the local test harness:
+
+```python
+erc_isaac/joint_response.py
+```
+
+Workflow:
+
+1. Build the repaired ERC torque table from the configured bistable function.
+2. Generate a `joint_response.py` YAML config with `joint_response.mode=piecewise`
+   and the repaired ERC table as the piecewise response.
+3. If the required yaw-only USD asset is missing, call:
+
+```python
+scripts/convert_concentrated_urdf_yaw_only.py
+```
+
+4. Launch the local `joint_response.py` simulation with the generated config.
+
+The wrapper also writes a recommended `test.torque_z` based on the repaired ERC
+peak passive torque so the applied load in the Isaac Lab test is scaled to a
+reasonable level.
+
+The wrapper exposes runtime options such as `--headless`, `--video`,
+`--analytics`, `--analytics_path`, and `--analytics_fps`. It writes the final
+video and analytics paths into the generated config as absolute paths under
+this repository's `results/` tree, and the analytics replay uses the same
+playback slow-down as the viewport video. Any remaining unknown CLI options
+are also forwarded.
+
+After asset generation, the wrapper also recolors the yaw-only USD locally so:
+
+- `arm_segment_1_*` (non-folding / proximal) uses a distinct warm color,
+- `arm_segment_2_*` (folding / distal) uses a distinct green color,
+- `motor_*` uses a separate motor color.
+
+## Local Morphy Example
+
+The repository also exposes a second standalone example:
+
+```text
+examples/erc_profile_morphy_example.py
+```
+
+This local script implements:
+
+- repaired point-wise ERC profile generation,
+- fixed-base Morphy simulation,
+- viewport video recording,
+- analytics video export.
+
+The local wrapper exposes the main runtime options directly:
+
+- `--headless`
+- `--video`
+- `--analytics`
+- `--analytics_path`
+- `--analytics_fps`
+- `--camera_eye`
+- `--camera_target`
+- `--results_dir`
+
+All outputs are written locally under `results/morphy_erc_profile_example/`
+unless `--results_dir` is overridden.
 
 ## SpringCatalog
 

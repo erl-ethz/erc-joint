@@ -1,0 +1,103 @@
+# Joint response test configuration
+# Usage:
+#   1) Generate the yaw-only airframe USD + JSON (defaults from this file):
+#      python scripts/convert_concentrated_urdf_yaw_only.py --headless \
+#          --output_dir cache/workspace_local/my_airframe_yaw_only \
+#          --config configs/joint_response_template.yaml
+#      (Optional) override params on the CLI:
+#      python scripts/convert_concentrated_urdf_yaw_only.py --headless \
+#          --output_dir cache/workspace_local/my_airframe_yaw_only \
+#          --arm_proximal_length 0.02 --arm_distal_length 0.18 \
+#          --base_mass 0.3 --base_inertia 0.0005 0.0005 0.001
+#   2) Run the test with this config:
+#      python erc_isaac/joint_response.py --headless \
+#          --config configs/joint_response_template.yaml
+
+airframe:
+  usd_path: cache/workspace_local/my_airframe_yaw_only/concentrated_quadrotor_yaw_only.usd
+  airframe_data_path: cache/workspace_local/my_airframe_yaw_only/airframe_data.json
+
+airframe_generation:
+  arm_proximal_length: 0.1
+  arm_distal_length: 0.1
+  base_mass: 0.3
+  base_inertia: [0.0005, 0.0005, 0.001]
+
+simulator:
+  dt: 0.002
+  sim_duration: 1.0
+  gravity: [0.0, 0.0, 0.0]
+  device: "cuda:0"
+  enable_stabilization: false
+  soft_endstop:
+    enabled: true
+    angle_deg: 70.0
+    stiffness: 3.0
+    damping: 0.05
+
+joint:
+  stiffness: 0.3
+  damping: 0.01
+  # Hard joint limits (sim-level endstops). Set a scalar for symmetric limits or [lower, upper].
+  hard_endstop_deg: 90.0
+
+joint_response:
+  # mode: linear (use joint.stiffness), piecewise (table), or function (discretized)
+  mode: function
+  num_samples: 400
+  piecewise:
+    # List of [angle_rad, torque_Nm]
+    points: [[-0.523599, 0.4], [-0.05, 0.3], [0.0, 0.0], [0.05, -0.3], [0.523599, -0.4]]
+  function:
+    # name: sin, cos, tan, expression (custom expression), saturating_dual_stiffness
+    # theta is the joint angle in radians (same as joint_pos).
+    name: expression
+    # Bistable torque using trig (stable at 0 deg and 50 deg, unstable at 25 deg):
+    # theta1 = 50 deg = 0.8726646 rad
+    # torque(theta) = -k * sin(2*pi*theta/theta1)
+    # expression: "-(sigmoid(10*theta)-0.5)"
+    # expression: "-0.125 * (theta + 0.5 * theta**3 + 0.05 * theta**5)"
+    expression: "-0.4 * sin(2*pi*theta) -0.1 * tan(theta*0.96)"
+    angle_min: -1.5
+    angle_max: 1.5
+    offset: 0.0
+    torque_clip: null
+
+test:
+  torque_z: 0.55
+  # Applies torque_z * torque_directions[i] on motor_names[i]
+  motor_names: ["motor_0", "motor_1", "motor_2", "motor_3"]
+  torque_directions: [-1.0, 1.0, 1.0, -1.0]
+  # Optional time-based schedule of torque scaling (multiplies torque_z).
+  # Each entry applies for "duration" seconds. Omit to use a constant scale=1.
+  torque_schedule:
+    - duration: 0.3
+      scale: 0.0
+    - duration: 0.03
+      scale: 1.0
+    - duration: 0.3
+      scale: 0.0
+    - duration: 0.03
+      scale: -1.0
+    - duration: 0.3
+      scale: 0.0
+
+video:
+  # Set to null to disable, or provide a float (e.g., 0.25 = 4x slower)
+  playback_speed: null
+  path: results/joint_response_animation.mp4
+  # Optional analytics video (plots). Set to null to disable.
+  analytics_path: results/joint_response_analytics.mp4
+  analytics_fps: 60
+
+camera:
+  # Top-down, closer view (camera_eye is computed from target, distance, yaw_deg, height)
+  target: [-0.25, 0.0, 0.0]
+  distance: 0.8
+  yaw_deg: 0.0
+  height: 1.5
+
+output:
+  results_dir: results
+  plot_name: joint_response_chart.png
+  joint_response_plot_name: programmable_joint_response_profile.png

@@ -2,6 +2,7 @@
 % ERC sensor real time visualisation
 %
 % Author: Rui Wu (rui.wu@usys.ethz.ch)
+          Luca Girardi (luca.girardi@usys.ethz.ch)
 %         Stefano Mintchev (stefano.mintchev@usys.ethz.ch)
 % Environmental Robotics Lab, ETH Zurich, 2024
 %

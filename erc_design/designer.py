@@ -91,7 +91,7 @@ class ERCDesignResult:
 
 
 class ERCDesigner:
-    """Support-function ERC designer ported from ``ERC_model.mlx``."""
+    """Support-function ERC designer ported from ``matlab/ERC_model.mlx``."""
 
     def __init__(self, spring: Spring, config: ERCDesignConfig | None = None):
         self.spring = spring
@@ -270,16 +270,16 @@ def cumulative_trapezoid(y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 def finite_difference_first(y: torch.Tensor, dx: torch.Tensor) -> torch.Tensor:
     dy = torch.empty_like(y)
     dy[1:-1] = (y[2:] - y[:-2]) / (2.0 * dx)
-    dy[0] = (y[1] - y[0]) / dx
-    dy[-1] = (y[-1] - y[-2]) / dx
+    dy[0] = (-3.0 * y[0] + 4.0 * y[1] - y[2]) / (2.0 * dx)
+    dy[-1] = (3.0 * y[-1] - 4.0 * y[-2] + y[-3]) / (2.0 * dx)
     return dy
 
 
 def finite_difference_second(y: torch.Tensor, dx: torch.Tensor) -> torch.Tensor:
     ddy = torch.empty_like(y)
     ddy[1:-1] = (y[2:] - 2.0 * y[1:-1] + y[:-2]) / dx**2
-    ddy[0] = ddy[1]
-    ddy[-1] = ddy[-2]
+    ddy[0] = (2.0 * y[0] - 5.0 * y[1] + 4.0 * y[2] - y[3]) / dx**2
+    ddy[-1] = (2.0 * y[-1] - 5.0 * y[-2] + 4.0 * y[-3] - y[-4]) / dx**2
     return ddy
 
 
@@ -290,7 +290,7 @@ def repair_support_function(
     ddr: torch.Tensor,
     eps_m: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Finite-difference convexity repair from ``repair_support_function.m``."""
+    """Finite-difference convexity repair from ``matlab/repair_support_function.m``."""
 
     n = x.numel()
     dx = x[1] - x[0]
@@ -307,18 +307,6 @@ def repair_support_function(
     a[0, 0] = 1.0
     g[0] = r[0]
 
-    a[1, :] = 0.0
-    a[1, 0:3] = torch.as_tensor([-3.0, 4.0, -1.0], dtype=x.dtype, device=x.device) / (
-        2.0 * dx
-    )
-    g[1] = dr[0]
-
-    a[-2, :] = 0.0
-    a[-2, -3:] = torch.as_tensor([1.0, -4.0, 3.0], dtype=x.dtype, device=x.device) / (
-        2.0 * dx
-    )
-    g[-2] = dr[-1]
-
     a[-1, :] = 0.0
     a[-1, -1] = 1.0
     g[-1] = r[-1]
@@ -326,11 +314,6 @@ def repair_support_function(
     r_new = torch.linalg.solve(a, g)
     dr_new = finite_difference_first(r_new, dx)
     ddr_new = finite_difference_second(r_new, dx)
-    dr_new[0] = dr[0]
-    dr_new[-1] = dr[-1]
-    ddr_new[0] = ddr_new[1]
-    ddr_new[-2] = ddr_new[-3]
-    ddr_new[-1] = ddr_new[-3]
     return r_new, dr_new, ddr_new
 
 

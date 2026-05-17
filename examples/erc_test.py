@@ -93,6 +93,8 @@ class ERCPlotApp:
         self.min_angle_var = tk.StringVar(value="-90")
         self.max_angle_var = tk.StringVar(value="90")
         self.status_var = tk.StringVar(value="")
+        self._drag_idx: int | None = None
+        self._knot_artists: tuple | None = None
 
         self._build_layout()
         self._populate_points(DEFAULT_POINTS_DEG_NM)
@@ -184,6 +186,9 @@ class ERCPlotApp:
         toolbar = NavigationToolbar2Tk(self.canvas, plot_area, pack_toolbar=False)
         toolbar.update()
         toolbar.pack(fill=tk.X)
+        self.canvas.mpl_connect("button_press_event", self._on_press)
+        self.canvas.mpl_connect("motion_notify_event", self._on_motion)
+        self.canvas.mpl_connect("button_release_event", self._on_release)
 
     def _entry_row(self, parent: ttk.Frame, label: str, variable: tk.StringVar) -> None:
         row = ttk.Frame(parent)
@@ -279,6 +284,8 @@ class ERCPlotApp:
             self.result = designer.design(profile)
             self._update_spring_table(spring)
             self._update_plots((min_angle, max_angle))
+            self._draw_knots(points)
+            self.canvas.draw_idle()
             self.status_var.set(
                 "Admissible profile ready. "
                 f"alpha={self.result.alpha:.6g}, "
@@ -324,9 +331,6 @@ class ERCPlotApp:
         target = result.target_torque_nm.detach().cpu().numpy()
         scaled = result.scaled_torque_nm.detach().cpu().numpy()
         admissible = result.repaired_torque_nm.detach().cpu().numpy()
-        requested_knots = result.input_profile.to_tensor().detach().cpu()
-        requested_angles_deg = (requested_knots[:, 0] * 180.0 / math.pi).numpy()
-        requested_torques = requested_knots[:, 1].numpy()
 
         cam = result.cam_xy_m.detach().cpu().numpy() * 1000.0
         repaired_cam = result.repaired_cam_xy_m.detach().cpu().numpy() * 1000.0
@@ -335,12 +339,12 @@ class ERCPlotApp:
         curvature = result.curvature_radius_m.detach().cpu().numpy() * 1000.0
         repaired_curvature = result.repaired_curvature_radius_m.detach().cpu().numpy() * 1000.0
 
+        self._knot_artists = None
         self.ax_torque.clear()
         self.ax_torque.plot(angles_deg, target, color="#303030", label="requested")
         if result.was_scaled:
             self.ax_torque.plot(angles_deg, scaled, "--", color="#b7791f", label="energy scaled")
         self.ax_torque.plot(angles_deg, admissible, color="#0072b2", label="admissible")
-        self.ax_torque.scatter(requested_angles_deg, requested_torques, color="#303030", s=18)
         self.ax_torque.set_title("Torque Profile")
         self.ax_torque.set_xlabel("joint angle [deg]")
         self.ax_torque.set_ylabel("torque [Nm]")
@@ -380,7 +384,70 @@ class ERCPlotApp:
         self.ax_curvature.grid(True, alpha=0.3)
         self.ax_curvature.legend()
 
-        self.canvas.draw_idle()
+    def _draw_knots(self, points: list[tuple[float, float]]) -> None:
+        sorted_points = sorted(points, key=lambda point: point[0])
+        angles = [point[0] for point in sorted_points]
+        torques = [point[1] for point in sorted_points]
+        line, = self.ax_torque.plot(angles, torques, "--", color="#303030", lw=1, zorder=5)
+        scatter = self.ax_torque.scatter(angles, torques, color="#303030", s=40, zorder=6)
+        self._knot_artists = (line, scatter)
+
+    def _on_press(self, event) -> None:
+        if event.inaxes is not self.ax_torque or event.button != 1:
+            return
+        if getattr(self.canvas.toolbar, "mode", "") != "":
+            return
+        points = self._read_points(raise_on_error=False)
+        if not points:
+            return
+
+        min_distance = float("inf")
+        min_index = None
+        for index, point in enumerate(points):
+            px, py = self.ax_torque.transData.transform(point)
+            distance = math.hypot(event.x - px, event.y - py)
+            if distance < min_distance:
+                min_distance = distance
+                min_index = index
+        if min_distance < 14:
+            self._drag_idx = min_index
+
+    def _on_motion(self, event) -> None:
+        import numpy as np
+
+        if self._drag_idx is None or event.inaxes is not self.ax_torque:
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+
+        points = self._read_points(raise_on_error=False)
+        if self._drag_idx >= len(points):
+            return
+
+        new_angle = round(event.xdata, 4)
+        new_torque = round(event.ydata, 4)
+        points[self._drag_idx] = (new_angle, new_torque)
+        children = self.points_table.get_children()
+        if self._drag_idx < len(children):
+            self.points_table.item(
+                children[self._drag_idx],
+                values=(f"{new_angle:.6g}", f"{new_torque:.6g}"),
+            )
+        if self._knot_artists is not None:
+            sorted_points = sorted(points, key=lambda point: point[0])
+            xs = [point[0] for point in sorted_points]
+            ys = [point[1] for point in sorted_points]
+            line, scatter = self._knot_artists
+            line.set_xdata(xs)
+            line.set_ydata(ys)
+            scatter.set_offsets(np.column_stack([xs, ys]))
+            self.canvas.draw_idle()
+
+    def _on_release(self, event) -> None:
+        if self._drag_idx is None or event.button != 1:
+            return
+        self._drag_idx = None
+        self.recompute()
 
     def export_curve(self) -> None:
         if self.result is None:

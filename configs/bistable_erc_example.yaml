@@ -1,0 +1,87 @@
+spring:
+  catalog_path: configs/springs.yaml
+  spring_id: sodemann_E03600551250M
+
+erc_design:
+  safety_factor: 1.1
+  n_grid: 1000
+  joint_angle_limits_deg: [-85.0, 85.0]
+  energy_reference_angle_deg: 0.0
+  convexity_eps_m: 1.0e-3
+  energy_scale_eps: 1.0e-6
+
+function_profile:
+  name: expression
+  expression: "-0.2 * sin(2*pi*theta) - 0.05 * tan(theta * 0.96)"
+  angle_min_deg: -85.0
+  angle_max_deg: 85.0
+  num_samples: 400
+  torque_clip_nm: null
+
+validation:
+  max_torque_rmse_nm: 0.1
+
+isaac_example:
+  applied_torque_scale: 1.2
+
+isaaclab_simulation:
+  template_config: configs/joint_response_template.yaml
+  workspace_dir: results/bistable_erc_example/upj_workspace
+  generated_config: results/bistable_erc_example/upj_joint_response_config.yaml
+  simulation_output_dir: results/bistable_erc_example/upj_results
+  convert_if_missing: true
+  overrides:
+    airframe_generation:
+      arm_proximal_length: 0.1
+      arm_distal_length: 0.1
+      base_mass: 0.3
+      base_inertia: [0.0005, 0.0005, 0.001]
+    simulator:
+      dt: 0.002
+      sim_duration: 1.0
+      gravity: [0.0, 0.0, 0.0]
+      device: cuda:0
+      enable_stabilization: false
+      soft_endstop:
+        enabled: true
+        angle_deg: 70.0
+        stiffness: 3.0
+        damping: 0.05
+    joint:
+      stiffness: 0.3
+      damping: 0.01
+      hard_endstop_deg: 90.0
+    test:
+      motor_names: [motor_0, motor_1, motor_2, motor_3]
+      torque_directions: [-1.0, 1.0, 1.0, -1.0]
+      torque_schedule:
+        - duration: 0.3
+          scale: 0.0
+        - duration: 0.03
+          scale: 1.0
+        - duration: 0.3
+          scale: 0.0
+        - duration: 0.03
+          scale: -1.0
+        - duration: 0.3
+          scale: 0.0
+    video:
+      playback_speed: null
+      path: results/bistable_erc_example/upj_joint_response.mp4
+      analytics_path: results/bistable_erc_example/upj_joint_response_analytics.mp4
+      analytics_fps: 60
+    camera:
+      target: [0.05, 0.0, 0.5]
+      distance: 0.5315
+      yaw_deg: 41.2
+      height: 0.3
+
+output:
+  results_dir: results/bistable_erc_example
+  table_csv: bistable_repaired_torque_table.csv
+  plot_png: bistable_repaired_profile.png
+  function_py: bistable_erc_torque_fn.py
+  curve_xyz: bistable_repaired_cam.xyz
+  curve_sldcrv: bistable_repaired_cam.sldcrv
+  summary_yaml: bistable_erc_summary.yaml
+  isaac_load_yaml: bistable_isaac_load.yaml

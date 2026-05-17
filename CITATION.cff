@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: "ERC-joint-dev"
+message: "If you use this repository or build on its ERC design workflow, please cite the article below."
+license: "MIT"
+authors:
+  - family-names: "Wu"
+    given-names: "Rui"
+  - family-names: "Girardi"
+    given-names: "Luca"
+  - family-names: "Maquignaz"
+    given-names: "Gabriel"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Wu"
+      given-names: "Rui"
+    - family-names: "Girardi"
+      given-names: "Luca"
+    - family-names: "Mintchev"
+      given-names: "Stefano"
+  title: "Encoding mechanical intelligence using ultraprogrammable joints"
+  journal: "Science Advances"
+  year: 2025
+  volume: 11
+  issue: 17
+  article-number: "eadv2052"
