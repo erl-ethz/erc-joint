@@ -22,6 +22,12 @@ class ERCTorqueFunctionBuild:
     actual_parameters: tuple[float, ...]
     angle_offset_rad: float
 
+    @property
+    def actual_knots_deg_nm(self) -> tuple[tuple[float, float], ...]:
+        """Return the flattened design knots as ``(angle_deg, torque_nm)`` pairs."""
+        values = self.actual_parameters
+        return tuple((values[i], values[i + 1]) for i in range(0, len(values), 2))
+
 @dataclass(frozen=True)
 class FormulaTorqueParameters:
     a: float
@@ -78,6 +84,23 @@ def formula_torque_profile_knots_rad_nm(parameters: FormulaTorqueParameters, mir
         knots = tuple(sorted(((-angle, -torque) for (angle, torque) in knots)))
     return tuple(((float(angle), float(torque)) for (angle, torque) in knots))
 
+def tabular_torque_profile_knots_deg_nm(knots_deg_nm: Sequence[tuple[float, float]], mirror: bool) -> tuple[tuple[float, float], ...]:
+    """Validate and optionally mirror an explicit torque-knot table.
+
+    The input is intentionally tabular: each entry is a literal
+    ``(joint_angle_deg, torque_nm)`` pair.
+    """
+    knots = tuple((float(angle_deg), float(torque_nm)) for (angle_deg, torque_nm) in knots_deg_nm)
+    if len(knots) < 2:
+        raise ValueError("torque-profile knots must contain at least two points")
+    if any((right[0] <= left[0] for (left, right) in zip(knots, knots[1:]))):
+        raise ValueError(
+            f"torque-profile knots must be strictly increasing in angle; got {[point[0] for point in knots]} degrees"
+        )
+    if mirror:
+        knots = tuple(sorted(((-angle, -torque) for (angle, torque) in knots)))
+    return knots
+
 def zero_crossing_angle_rad(table: torch.Tensor) -> float:
     angles = table[:, 0]
     torques = table[:, 1]
@@ -98,14 +121,24 @@ def zero_crossing_angle_rad(table: torch.Tensor) -> float:
     closest_index = int(torch.argmin(torch.abs(all_crossing_angles)))
     return float(all_crossing_angles[closest_index])
 
-def build_formula_erc_torque_function(parameters: FormulaTorqueParameters, fn_name: str, mirror: bool, spring_catalog_path: str | Path, spring_id: str, n_grid: int, safety_factor: float, max_torque_rmse_nm: float) -> ERCTorqueFunctionBuild:
-    """Build a repaired ERC torque response from the formula-defined knots.
+def build_tabular_erc_torque_function(
+    requested_knots_deg_nm: Sequence[tuple[float, float]],
+    fn_name: str,
+    mirror: bool,
+    spring_catalog_path: str | Path,
+    spring_id: str,
+    n_grid: int,
+    safety_factor: float,
+    max_torque_rmse_nm: float,
+) -> ERCTorqueFunctionBuild:
+    """Build a repaired ERC torque response from explicit angle/torque knots.
 
-    The formula angles are radians because the simulator calls torque
-    functions with joint angles in radians.
+    The caller provides a literal knot table in joint-angle degrees and Nm.
+    ``mirror=True`` flips the table for the opposite arm.
     """
-    knots_rad_nm = formula_torque_profile_knots_rad_nm(parameters, mirror)
-    erc_knots_rad_nm = tuple(((angle, -torque) for (angle, torque) in knots_rad_nm))
+    requested_knots_deg_nm = tuple((float(angle_deg), float(torque_nm)) for (angle_deg, torque_nm) in requested_knots_deg_nm)
+    knots_deg_nm = tabular_torque_profile_knots_deg_nm(requested_knots_deg_nm, mirror)
+    erc_knots_rad_nm = tuple(((math.radians(angle_deg), -torque_nm) for (angle_deg, torque_nm) in knots_deg_nm))
     knots = torch.tensor(erc_knots_rad_nm, dtype=torch.float64)
     profile = PiecewiseLinearTorqueProfile.from_xy(knots[:, 0], knots[:, 1])
     spring = SpringCatalog.from_yaml(spring_catalog_path)[spring_id]
@@ -120,5 +153,18 @@ def build_formula_erc_torque_function(parameters: FormulaTorqueParameters, fn_na
     function_string = torque_table_to_function_string(result.output_torque_table, fn_name, 'flat', (0.4, -0.4))
     namespace = {'torch': torch}
     exec(function_string, namespace)
+    actual_parameters = tuple(value for knot in knots_deg_nm for value in knot)
+    return ERCTorqueFunctionBuild(
+        torque_function=namespace[fn_name],
+        function_string=function_string,
+        design_result=result,
+        requested_knots_deg_nm=requested_knots_deg_nm,
+        actual_parameters=actual_parameters,
+        angle_offset_rad=angle_offset_rad,
+    )
+
+def build_formula_erc_torque_function(parameters: FormulaTorqueParameters, fn_name: str, mirror: bool, spring_catalog_path: str | Path, spring_id: str, n_grid: int, safety_factor: float, max_torque_rmse_nm: float) -> ERCTorqueFunctionBuild:
+    """Backward-compatible wrapper around the tabular helper."""
+    knots_rad_nm = formula_torque_profile_knots_rad_nm(parameters, mirror)
     knots_deg_nm = tuple(((float(angle * 180.0 / math.pi), float(torque)) for (angle, torque) in knots_rad_nm))
-    return ERCTorqueFunctionBuild(torque_function=namespace[fn_name], function_string=function_string, design_result=result, requested_knots_deg_nm=knots_deg_nm, actual_parameters=(float(parameters.a), float(parameters.b), float(parameters.c), float(parameters.d), float(parameters.end_angle_rad)), angle_offset_rad=angle_offset_rad)
+    return build_tabular_erc_torque_function(knots_deg_nm, fn_name, False, spring_catalog_path, spring_id, n_grid, safety_factor, max_torque_rmse_nm)

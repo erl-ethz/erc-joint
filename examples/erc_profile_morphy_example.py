@@ -1,7 +1,7 @@
 """Smoke test for ERC-generated soft-joint torque profiles.
 
 This script does not run optimization. It:
-1. Builds two example ERC joint torque functions.
+1. Builds two example ERC joint torque functions from an explicit torque table.
 2. Saves torque-profile and cam-profile plots to results/.
 3. Exports cam XYZ files for SolidWorks.
 4. Generates a Morphy USD containing those functions.
@@ -63,8 +63,7 @@ from erc_isaac.common_utils import Recorder
 from erc_isaac.erc_torque_profiles import (
     DEFAULT_SPRING_CATALOG,
     DEFAULT_SPRING_ID,
-    FormulaTorqueParameters,
-    build_formula_erc_torque_function,
+    build_tabular_erc_torque_function,
 )
 from erc_isaac.morphy_simulator import MorphySimulator
 
@@ -83,12 +82,14 @@ TORQUE_SCHEDULE = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-FORMULA_TORQUE_PARAMETERS = FormulaTorqueParameters(
-    a=0.2,
-    b=0.5,
-    c=0.1,
-    d=0.2,
-    end_angle_rad=math.radians(78.0),
+# Explicit joint-angle / torque knots in degrees and Nm.
+TORQUE_PROFILE_KNOTS_DEG_NM = (
+    (-2.0, 0.4),
+    (0.0, 0.0),
+    (1.0, -0.2),
+    (39.0, 0.0),
+    (77.5, 0.0),
+    (78.0, -0.4),
 )
 
 
@@ -321,7 +322,7 @@ def save_analytics_video(
                 fig.canvas.draw()
                 buf = np.asarray(fig.canvas.buffer_rgba())
                 vw.write(cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR))
-                if i % 200 == 0 and i > 0:
+                if i % 50 == 0 and i > 0:
                     print(f"[Analytics] ... {i}/{total}")
         finally:
             vw.release()
@@ -453,8 +454,8 @@ def main() -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
 
     print("[ERC] Building example ERC torque functions")
-    left_build = build_formula_erc_torque_function(
-        FORMULA_TORQUE_PARAMETERS,
+    left_build = build_tabular_erc_torque_function(
+        TORQUE_PROFILE_KNOTS_DEG_NM,
         "torque_fn_left",
         False,
         DEFAULT_SPRING_CATALOG,
@@ -463,8 +464,8 @@ def main() -> None:
         1.1,
         0.6,
     )
-    right_build = build_formula_erc_torque_function(
-        FORMULA_TORQUE_PARAMETERS,
+    right_build = build_tabular_erc_torque_function(
+        TORQUE_PROFILE_KNOTS_DEG_NM,
         "torque_fn_right",
         True,
         DEFAULT_SPRING_CATALOG,
