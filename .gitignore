@@ -1,9 +1,12 @@
-# Claude Code config
-.claude/settings.local.json
-
 # MATLAB autosave backups
 *.asv
 
 # Generated output files
 results/*
 !results/.gitkeep
+
+Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
