@@ -266,7 +266,7 @@ Choosing a larger safety factor improves matching accuracy at the cost of larger
 
 - Rui Wu ([@wurui1991](https://github.com/wurui1991)): original ERC repository and MATLAB workflow.
 - Luca Girardi ([@lucagirardi](https://github.com/lucagirardi)): Python port, repair-oriented updates, Isaac integration, and documentation updates.
-- Gabriel Maquignaz ([@gabmaquignaz](https://github.com/gabmaquignaz)): Python, repair-oriented, and integration-related updates.
+- Gabriel Maquignaz ([@gabmaquignaz](https://github.com/gabmaquignaz)): MATLAB, repair-oriented, and integration-related updates.
 - Etor Arza Gonzalez ([@EtorArza](https://github.com/EtorArza)): downstream simulation and airframe-integration contributions.
 
 ## Citation
