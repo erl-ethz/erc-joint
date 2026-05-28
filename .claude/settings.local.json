@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(mkdir -p \"c:/Users/lucag/Documents/_Code/ERC-joint-dev/results\")",
+      "Bash(touch \"c:/Users/lucag/Documents/_Code/ERC-joint-dev/results/.gitkeep\")",
+      "Bash(git rm *)",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)"
+    ]
+  }
+}

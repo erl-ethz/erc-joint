@@ -71,3 +71,15 @@ springs:
     maximum_load_n: 37.70
     spring_constant_n_per_m: 3.92e3
     count: 1
+  - id: durovis_0.5x3.5x15.2_C
+    description: Spring from Durovis 0.5x3.5x15.2_C https://www.durovis.ch/en/05-1-1.html; d = 0.5 mm, D_e = 3.5 mm, L_0 = 15.2 mm, steel grade C
+    material: steel grade C
+    wire_diameter_m: 0.5e-3
+    external_diameter_m: 3.5e-3
+    free_length_m: 15.2e-3
+    max_length_m: 30.27e-3
+    max_extension_m: 15.07e-3
+    tension_at_rest_n: 0.94
+    maximum_load_n: 18.82
+    spring_constant_n_per_m: 1.19e3
+    count: 1
