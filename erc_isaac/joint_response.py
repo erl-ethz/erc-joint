@@ -216,105 +216,182 @@ def _save_analytics_video(
     angles_deg: np.ndarray,
     applied_torque: np.ndarray,
     passive_torque: np.ndarray,
-    damping_torque: np.ndarray,
-    soft_endstop_torque: np.ndarray,
-    total_reaction_torque: np.ndarray,
     response_angles_rad: np.ndarray,
     response_torques: np.ndarray,
     output_path: Path,
+    pre_repair_table: np.ndarray | None = None,
+    post_repair_cam_mm: np.ndarray | None = None,
+    pre_repair_cam_mm: np.ndarray | None = None,
+    support_angles_rad: np.ndarray | None = None,
+    font_sizes: dict | None = None,
     fps: int = 60,
     playback_speed: float | None = None,
     dt: float | None = None,
 ):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.switch_backend("Agg")
+    font_sizes = font_sizes or {}
+    legend_font_size = float(font_sizes.get("legend", 11))
+    axes_font_size = float(font_sizes.get("axes", 13))
+    tick_font_size = float(font_sizes.get("ticks", 13))
+    title_font_size = float(font_sizes.get("titles", 15))
 
     if playback_speed is not None:
         if dt is None:
             raise ValueError("dt is required when playback_speed is provided.")
-        frame_indices = _expand_for_playback_speed(times, dt, playback_speed, target_fps=60)
+        frame_indices = _expand_for_playback_speed(times, dt, playback_speed, target_fps=fps)
         times_plot = times[frame_indices]
         angles_deg_plot = angles_deg[frame_indices]
         applied_torque_plot = applied_torque[frame_indices]
         passive_torque_plot = passive_torque[frame_indices]
-        damping_torque_plot = damping_torque[frame_indices]
-        soft_endstop_torque_plot = soft_endstop_torque[frame_indices]
-        total_reaction_torque_plot = total_reaction_torque[frame_indices]
-        fps = 60
     else:
         times_plot = times
         angles_deg_plot = angles_deg
         applied_torque_plot = applied_torque
         passive_torque_plot = passive_torque
-        damping_torque_plot = damping_torque
-        soft_endstop_torque_plot = soft_endstop_torque
-        total_reaction_torque_plot = total_reaction_torque
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12))
-    fig.suptitle("Joint Analytics (Replay)", fontsize=14)
-
-    # Panel 1: torques vs time
-    line_applied, = ax1.plot([], [], "k-", linewidth=1.5, label="applied motor_0 torque")
-    line_total, = ax1.plot([], [], "r-", linewidth=2.0, label="reaction total")
-    line_passive, = ax1.plot([], [], "b--", linewidth=1.5, label="reaction passive")
-    line_damping, = ax1.plot([], [], "g--", linewidth=1.0, label="reaction viscous")
-    line_soft, = ax1.plot([], [], "m--", linewidth=1.0, label="reaction soft endstop")
-    ax1.set_xlabel("Time (s)")
-    ax1.set_ylabel("Torque (Nm)")
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc="upper right", fontsize=8)
-
-    # Panel 2: joint angle vs time
-    line_angle, = ax2.plot([], [], "b-", linewidth=2.0, label="joint_0 angle")
-    ax2.set_xlabel("Time (s)")
-    ax2.set_ylabel("Angle (deg)")
-    ax2.grid(True, alpha=0.3)
-    ax2.legend(loc="upper right", fontsize=8)
-
-    # Panel 3: torque vs angle response curve + moving dot
     response_angles_deg = response_angles_rad * 180.0 / np.pi
-    ax3.plot(response_angles_deg, response_torques, "k-", linewidth=2.0, label="response curve")
-    dot, = ax3.plot([], [], "ro", markersize=6, label="current")
-    ax3.set_xlabel("Angle (deg)")
-    ax3.set_ylabel("Torque (Nm)")
-    ax3.grid(True, alpha=0.3)
-    ax3.legend(loc="upper right", fontsize=8)
-
-    # Limits
-    t_min, t_max = float(times[0]), float(times[-1])
-    ax1.set_xlim(t_min, t_max)
-    ax2.set_xlim(t_min, t_max)
-
-    torque_all = np.concatenate(
-        [applied_torque, total_reaction_torque, passive_torque, damping_torque, soft_endstop_torque]
+    pre_repair_angles_deg = (
+        None if pre_repair_table is None else pre_repair_table[:, 0] * 180.0 / np.pi
     )
-    t_min_val = float(np.min(torque_all))
-    t_max_val = float(np.max(torque_all))
-    pad = 0.05 * max(1.0, t_max_val - t_min_val)
-    ax1.set_ylim(t_min_val - pad, t_max_val + pad)
+    pre_repair_torques = None if pre_repair_table is None else pre_repair_table[:, 1]
 
-    ang_min = float(np.min(angles_deg))
-    ang_max = float(np.max(angles_deg))
-    pad_ang = 0.05 * max(1.0, ang_max - ang_min)
-    ax2.set_ylim(ang_min - pad_ang, ang_max + pad_ang)
+    def cam_contact_point(joint_angle_rad: float):
+        if post_repair_cam_mm is None or support_angles_rad is None:
+            return 0.0, 0.0
+        support_angle = joint_angle_rad * 0.5
+        idx = int(np.searchsorted(support_angles_rad, support_angle, side="right")) - 1
+        idx = int(np.clip(idx, 0, len(post_repair_cam_mm) - 1))
+        return post_repair_cam_mm[idx, 0], post_repair_cam_mm[idx, 1]
 
-    resp_min = float(np.min(response_torques))
-    resp_max = float(np.max(response_torques))
-    pad_resp = 0.05 * max(1.0, resp_max - resp_min)
-    ax3.set_ylim(resp_min - pad_resp, resp_max + pad_resp)
+    contact_points = np.array(
+        [cam_contact_point(np.deg2rad(angle)) for angle in angles_deg_plot]
+    )
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
+    fig.suptitle("ERC Joint Response Analytics - First Arm", fontsize=title_font_size + 2)
+    ax_applied, ax_cam = axes[0, 0], axes[0, 1]
+    ax_angle, ax_profile = axes[1, 0], axes[1, 1]
+
+    line_applied, = ax_applied.plot([], [], color="#0072b2", linewidth=2.0, label="arm 0 applied")
+    ax_applied.set_xlim(float(times[0]), float(times[-1]))
+    applied_pad = max(0.01, 0.1 * float(np.max(np.abs(applied_torque))))
+    ax_applied.set_ylim(
+        float(np.min(applied_torque)) - applied_pad,
+        float(np.max(applied_torque)) + applied_pad,
+    )
+    ax_applied.axhline(0.0, color="k", linewidth=0.7, alpha=0.4)
+    ax_applied.set_title("Applied Torque", fontsize=title_font_size)
+    ax_applied.set_xlabel("Time [s]", fontsize=axes_font_size)
+    ax_applied.set_ylabel("Torque [Nm]", fontsize=axes_font_size)
+    ax_applied.legend(fontsize=legend_font_size)
+    ax_applied.grid(True, alpha=0.3)
+
+    if pre_repair_cam_mm is not None:
+        ax_cam.plot(
+            pre_repair_cam_mm[:, 0],
+            pre_repair_cam_mm[:, 1],
+            "--",
+            color="#999999",
+            linewidth=1.5,
+            label="cam pre-repair",
+        )
+    if post_repair_cam_mm is not None:
+        ax_cam.plot(
+            post_repair_cam_mm[:, 0],
+            post_repair_cam_mm[:, 1],
+            color="#0072b2",
+            linewidth=2.0,
+            label="cam post-repair",
+        )
+    ax_cam.scatter([0.0], [0.0], color="k", s=45, marker="+", zorder=5, label="pivot")
+    contact_dot, = ax_cam.plot([], [], "o", color="#d55e00", markersize=9, label="contact")
+    contact_arm, = ax_cam.plot([], [], color="#d55e00", linewidth=1.5, alpha=0.7)
+    cam_terms = [np.array([[0.0, 0.0]])]
+    if pre_repair_cam_mm is not None:
+        cam_terms.append(pre_repair_cam_mm)
+    if post_repair_cam_mm is not None:
+        cam_terms.append(post_repair_cam_mm)
+    all_cam = np.concatenate(cam_terms)
+    cam_pad = 0.08 * max(1.0, float(np.max(np.abs(all_cam))))
+    ax_cam.set_xlim(float(np.min(all_cam[:, 0])) - cam_pad, float(np.max(all_cam[:, 0])) + cam_pad)
+    ax_cam.set_ylim(float(np.min(all_cam[:, 1])) - cam_pad, float(np.max(all_cam[:, 1])) + cam_pad)
+    ax_cam.set_aspect("equal")
+    ax_cam.set_title("Cam Profile - Contact Point", fontsize=title_font_size)
+    ax_cam.set_xlabel("x [mm]", fontsize=axes_font_size)
+    ax_cam.set_ylabel("y [mm]", fontsize=axes_font_size)
+    ax_cam.legend(
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        borderaxespad=0.0,
+        fontsize=legend_font_size,
+    )
+    ax_cam.grid(True, alpha=0.3)
+
+    line_angle, = ax_angle.plot([], [], color="#0072b2", linewidth=2.0, label="arm 0")
+    ax_angle.set_xlim(float(times[0]), float(times[-1]))
+    angle_pad = max(1.0, 0.1 * float(np.max(np.abs(angles_deg))))
+    ax_angle.set_ylim(float(np.min(angles_deg)) - angle_pad, float(np.max(angles_deg)) + angle_pad)
+    ax_angle.axhline(0.0, color="k", linewidth=0.7, alpha=0.4)
+    ax_angle.set_title("Joint Angle", fontsize=title_font_size)
+    ax_angle.set_xlabel("Time [s]", fontsize=axes_font_size)
+    ax_angle.set_ylabel("Angle [deg]", fontsize=axes_font_size)
+    ax_angle.legend(fontsize=legend_font_size)
+    ax_angle.grid(True, alpha=0.3)
+
+    if pre_repair_table is not None:
+        ax_profile.plot(
+            pre_repair_angles_deg,
+            pre_repair_torques,
+            "--",
+            color="#999999",
+            linewidth=1.5,
+            label="profile pre-repair",
+        )
+    ax_profile.plot(
+        response_angles_deg,
+        response_torques,
+        color="#0072b2",
+        linewidth=2.0,
+        label="profile post-repair",
+    )
+    operating_dot, = ax_profile.plot([], [], "o", color="#d55e00", markersize=9, label="current")
+    profile_angle_terms = [response_angles_deg]
+    profile_torque_terms = [response_torques]
+    if pre_repair_table is not None:
+        profile_angle_terms.append(pre_repair_angles_deg)
+        profile_torque_terms.append(pre_repair_torques)
+    all_profile_angles = np.concatenate(profile_angle_terms)
+    all_profile_torques = np.concatenate(profile_torque_terms)
+    profile_angle_pad = 0.05 * max(1.0, float(np.ptp(all_profile_angles)))
+    profile_torque_pad = 0.08 * max(0.01, float(np.max(np.abs(all_profile_torques))))
+    ax_profile.set_xlim(
+        float(np.min(all_profile_angles)) - profile_angle_pad,
+        float(np.max(all_profile_angles)) + profile_angle_pad,
+    )
+    ax_profile.set_ylim(
+        float(np.min(all_profile_torques)) - profile_torque_pad,
+        float(np.max(all_profile_torques)) + profile_torque_pad,
+    )
+    ax_profile.axhline(0.0, color="k", linewidth=0.7, alpha=0.4)
+    ax_profile.axvline(0.0, color="k", linewidth=0.7, alpha=0.4)
+    ax_profile.set_title("ERC Profile - Operating Point", fontsize=title_font_size)
+    ax_profile.set_xlabel("Angle [deg]", fontsize=axes_font_size)
+    ax_profile.set_ylabel("Torque [Nm]", fontsize=axes_font_size)
+    ax_profile.legend(fontsize=legend_font_size)
+    ax_profile.grid(True, alpha=0.3)
+
+    for axis in axes.flat:
+        axis.tick_params(axis="both", labelsize=tick_font_size)
 
     def update(i):
         t_slice = times_plot[: i + 1]
         line_applied.set_data(t_slice, applied_torque_plot[: i + 1])
-        line_total.set_data(t_slice, total_reaction_torque_plot[: i + 1])
-        line_passive.set_data(t_slice, passive_torque_plot[: i + 1])
-        line_damping.set_data(t_slice, damping_torque_plot[: i + 1])
-        line_soft.set_data(t_slice, soft_endstop_torque_plot[: i + 1])
-
         line_angle.set_data(t_slice, angles_deg_plot[: i + 1])
-
-        dot.set_data([angles_deg_plot[i]], [passive_torque_plot[i]])
-        return line_applied, line_total, line_passive, line_damping, line_soft, line_angle, dot
+        operating_dot.set_data([angles_deg_plot[i]], [passive_torque_plot[i]])
+        contact_dot.set_data([contact_points[i, 0]], [contact_points[i, 1]])
+        contact_arm.set_data([0.0, contact_points[i, 0]], [0.0, contact_points[i, 1]])
+        return line_applied, line_angle, operating_dot, contact_dot, contact_arm
 
     try:
         import cv2
@@ -525,6 +602,7 @@ def main():
     elif args_cli.analytics:
         analytics_path_cfg = analytics_path_cfg or "results/test1b_yaw_only_analytics.mp4"
     analytics_fps = int(video_cfg.get("analytics_fps", 60))
+    analytics_font_sizes = video_cfg.get("analytics_font_sizes", {})
     recorder = None
 
     if video_slowdown is not None:
@@ -624,6 +702,7 @@ def main():
 
     if analytics_path_cfg is not None:
         analytics_path = resolve_path(analytics_path_cfg)
+        analytics_cfg = response_cfg.get("analytics", {})
         if use_response_table:
             response_angles_np = response_angles.detach().cpu().numpy()
             response_torques_np = response_torques.detach().cpu().numpy()
@@ -635,17 +714,29 @@ def main():
                 angle_max += 0.1
             response_angles_np = np.linspace(angle_min, angle_max, 200)
             response_torques_np = -stiffness * response_angles_np
+        pre_repair_table = analytics_cfg.get("pre_repair_table")
+        post_repair_cam_mm = analytics_cfg.get("post_repair_cam_mm")
+        pre_repair_cam_mm = analytics_cfg.get("pre_repair_cam_mm")
+        support_angles_rad = analytics_cfg.get("support_angles_rad")
         _save_analytics_video(
             times=np.array(times),
             angles_deg=angles_deg_history[:, 0],
             applied_torque=applied_torque_history,
             passive_torque=passive_torque_history,
-            damping_torque=damping_torque_history,
-            soft_endstop_torque=soft_endstop_torque_history,
-            total_reaction_torque=total_reaction_torque_history,
             response_angles_rad=response_angles_np,
             response_torques=response_torques_np,
             output_path=analytics_path,
+            pre_repair_table=None if pre_repair_table is None else np.asarray(pre_repair_table),
+            post_repair_cam_mm=None
+            if post_repair_cam_mm is None
+            else np.asarray(post_repair_cam_mm),
+            pre_repair_cam_mm=None
+            if pre_repair_cam_mm is None
+            else np.asarray(pre_repair_cam_mm),
+            support_angles_rad=None
+            if support_angles_rad is None
+            else np.asarray(support_angles_rad),
+            font_sizes=analytics_font_sizes,
             fps=analytics_fps,
             playback_speed=video_slowdown,
             dt=sim_dt,

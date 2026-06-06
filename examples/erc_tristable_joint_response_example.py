@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,7 +23,7 @@ from erc_design import (
 )
 
 
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "bistable_erc_example.yaml"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "erc_tristable_joint_response.yaml"
 
 
 def load_yaml(path: str | Path) -> dict:
@@ -82,74 +83,40 @@ def absolutize_config_path(path_value: str | Path | None) -> str | None:
     return str(resolve_repo_path(path_value))
 
 
-def colorize_upj_usd(usd_path: Path) -> None:
-    try:
-        from pxr import Gf, Sdf, Usd, UsdShade
-    except Exception as exc:
-        print(f"[UPJ] Skipping USD recolor; pxr unavailable: {exc}")
-        return
-
-    stage = Usd.Stage.Open(str(usd_path))
-    if stage is None:
-        raise RuntimeError(f"Failed to open USD for recoloring: {usd_path}")
-
-    color_rules = {
-        "base_link": (0.533, 0.533, 0.533),
-        "arm_segment_1_": (1.0, 0.549, 0.0),
-        "arm_segment_2_": (1.0, 0.843, 0.0),
-        "dummy_link_yaw_": (0.10, 0.10, 0.10),
-        "motor_": (0.196, 0.804, 0.196),
-    }
-
-    looks_path = Sdf.Path("/quadrotor/Looks")
-    UsdShade.Material.Define(stage, looks_path.AppendChild("Placeholder"))
-    placeholder = stage.GetPrimAtPath(looks_path.AppendChild("Placeholder"))
-    if placeholder.IsValid():
-        stage.RemovePrim(placeholder.GetPath())
-
-    def ensure_material(name: str, color: tuple[float, float, float]):
-        material_path = looks_path.AppendChild(name)
-        shader_path = material_path.AppendChild("PreviewSurface")
-        material = UsdShade.Material.Define(stage, material_path)
-        shader = UsdShade.Shader.Define(stage, shader_path)
-        shader.CreateIdAttr("UsdPreviewSurface")
-        shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
-        shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.4)
-        shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0)
-        material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
-        return material
-
-    materials = {
-        key: ensure_material(f"ERC_{key.rstrip('_')}", color)
-        for key, color in color_rules.items()
-    }
-
-    changed = 0
-    for prim in stage.Traverse():
-        path_str = str(prim.GetPath())
-        if not path_str.endswith("/visuals"):
-            continue
-        material = None
-        if "/base_link/visuals" in path_str:
-            material = materials["base_link"]
+def isaac_subprocess_env() -> dict[str, str]:
+    """Remove Snap VS Code GTK paths that break host desktop helpers."""
+    env = os.environ.copy()
+    for key in (
+        "GTK_EXE_PREFIX",
+        "GTK_IM_MODULE_FILE",
+        "GTK_PATH",
+        "GIO_MODULE_DIR",
+        "GIO_LAUNCHED_DESKTOP_FILE",
+        "GIO_LAUNCHED_DESKTOP_FILE_PID",
+    ):
+        env.pop(key, None)
+    for key in ("XDG_DATA_DIRS", "XDG_DATA_HOME"):
+        original_key = f"{key}_VSCODE_SNAP_ORIG"
+        original_value = env.get(original_key)
+        if original_value:
+            env[key] = original_value
         else:
-            for key in ("arm_segment_1_", "arm_segment_2_", "dummy_link_yaw_", "motor_"):
-                if f"/{key}" in path_str:
-                    material = materials[key]
-                    break
-        if material is None:
-            continue
-        UsdShade.MaterialBindingAPI(prim).Bind(
-            material,
-            bindingStrength=UsdShade.Tokens.strongerThanDescendants,
-        )
-        changed += 1
-
-    stage.Save()
-    print(f"[UPJ] Rebound materials on visual prims: {changed}")
+            env.pop(key, None)
+    return env
 
 
-def build_upj_joint_response_config(
+def result_torque_to_output_table(result, torque_nm: torch.Tensor) -> list[list[float]]:
+    output_torque = result.output_torque_table[:, 1]
+    direct_err = torch.mean(torch.abs(output_torque - result.repaired_torque_nm))
+    inverted_err = torch.mean(torch.abs(output_torque + result.repaired_torque_nm))
+    sign = -1.0 if inverted_err < direct_err else 1.0
+    return torch.stack(
+        (result.output_torque_table[:, 0], sign * torque_nm),
+        dim=-1,
+    ).detach().cpu().tolist()
+
+
+def build_erc_tristable_joint_response_config(
     *,
     cfg: dict,
     result,
@@ -166,46 +133,55 @@ def build_upj_joint_response_config(
             f"Joint-response template config not found: {default_joint_response_cfg_path}"
         )
 
-    upj_cfg = load_yaml(default_joint_response_cfg_path)
+    joint_response_cfg = load_yaml(default_joint_response_cfg_path)
     overrides = ext_cfg.get("overrides", {})
     if overrides:
-        deep_update(upj_cfg, overrides)
+        deep_update(joint_response_cfg, overrides)
 
     workspace_dir = resolve_repo_path(ext_cfg["workspace_dir"])
     usd_path = workspace_dir / "concentrated_quadrotor_yaw_only.usd"
     airframe_data_path = workspace_dir / "airframe_data.json"
     sim_results_dir = resolve_repo_path(ext_cfg["simulation_output_dir"])
 
-    upj_cfg["airframe"] = {
+    joint_response_cfg["airframe"] = {
         "usd_path": str(usd_path),
         "airframe_data_path": str(airframe_data_path),
     }
-    upj_cfg["joint_response"] = {
+    joint_response_cfg["joint_response"] = {
         "mode": "piecewise",
         "num_samples": int(result.output_torque_table.shape[0]),
         "piecewise": {
             "points": result.output_torque_table.detach().cpu().tolist(),
         },
+        "analytics": {
+            "post_repair_table": result.output_torque_table.detach().cpu().tolist(),
+            "pre_repair_table": result_torque_to_output_table(result, result.scaled_torque_nm),
+            "post_repair_cam_mm": (
+                result.repaired_cam_xy_m.detach().cpu() * 1000.0
+            ).tolist(),
+            "pre_repair_cam_mm": (result.cam_xy_m.detach().cpu() * 1000.0).tolist(),
+            "support_angles_rad": result.support_angles_rad.detach().cpu().tolist(),
+        },
     }
-    upj_cfg.setdefault("test", {})
-    upj_cfg["test"]["torque_z"] = float(recommended_applied_torque_nm)
-    upj_cfg.setdefault("output", {})
-    upj_cfg["output"]["results_dir"] = str(sim_results_dir)
-    upj_cfg["output"]["plot_name"] = "upj_joint_response_chart.png"
-    upj_cfg["output"]["joint_response_plot_name"] = "upj_programmable_joint_response_profile.png"
-    upj_cfg.setdefault("video", {})
-    upj_cfg["video"]["path"] = absolutize_config_path(upj_cfg["video"].get("path"))
-    upj_cfg["video"]["analytics_path"] = absolutize_config_path(
-        upj_cfg["video"].get("analytics_path")
+    joint_response_cfg.setdefault("test", {})
+    joint_response_cfg["test"]["torque_z"] = float(recommended_applied_torque_nm)
+    joint_response_cfg.setdefault("output", {})
+    joint_response_cfg["output"]["results_dir"] = str(sim_results_dir)
+    joint_response_cfg["output"]["plot_name"] = "erc_tristable_joint_response_chart.png"
+    joint_response_cfg["output"]["joint_response_plot_name"] = "erc_tristable_joint_response_profile.png"
+    joint_response_cfg.setdefault("video", {})
+    joint_response_cfg["video"]["path"] = absolutize_config_path(joint_response_cfg["video"].get("path"))
+    joint_response_cfg["video"]["analytics_path"] = absolutize_config_path(
+        joint_response_cfg["video"].get("analytics_path")
     )
     if analytics_fps is not None:
-        upj_cfg["video"]["analytics_fps"] = int(analytics_fps)
+        joint_response_cfg["video"]["analytics_fps"] = int(analytics_fps)
 
-    write_yaml(generated_config_path, upj_cfg)
-    return upj_cfg
+    write_yaml(generated_config_path, joint_response_cfg)
+    return joint_response_cfg
 
 
-def ensure_upj_assets(
+def ensure_joint_response_assets(
     *,
     cfg: dict,
     generated_config_path: Path,
@@ -217,11 +193,10 @@ def ensure_upj_assets(
     airframe_data_path = workspace_dir / "airframe_data.json"
 
     if usd_path.exists() and airframe_data_path.exists():
-        colorize_upj_usd(usd_path)
         return
     if not bool(ext_cfg.get("convert_if_missing", True)):
         raise FileNotFoundError(
-            "UPJ USD asset is missing and convert_if_missing is disabled."
+            "Tristable joint-response USD asset is missing and convert_if_missing is disabled."
         )
 
     converter_path = PROJECT_ROOT / "scripts" / "convert_concentrated_urdf_yaw_only.py"
@@ -237,16 +212,22 @@ def ensure_upj_assets(
         str(generated_config_path),
         "--headless",
     ]
-    print(f"[UPJ] Generating USD asset: {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=PROJECT_ROOT, check=True)
+    print(f"[ERC Tristable Joint Response] Generating USD asset: {' '.join(cmd)}")
+    subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, env=isaac_subprocess_env())
     if not usd_path.exists() or not airframe_data_path.exists():
-        raise FileNotFoundError(
-            "UPJ asset conversion completed without producing the expected USD/JSON files."
+        produced_files = sorted(
+            str(path.relative_to(workspace_dir))
+            for path in workspace_dir.rglob("*")
+            if path.is_file()
         )
-    colorize_upj_usd(usd_path)
+        raise FileNotFoundError(
+            "Tristable joint-response asset conversion returned successfully without producing the expected "
+            f"files:\n  USD: {usd_path}\n  JSON: {airframe_data_path}\n"
+            f"Files produced under {workspace_dir}: {produced_files or 'none'}"
+        )
 
 
-def run_upj_joint_response(
+def run_erc_tristable_joint_response(
     *,
     cfg: dict,
     generated_config_path: Path,
@@ -257,8 +238,8 @@ def run_upj_joint_response(
         raise FileNotFoundError(f"Local joint_response.py not found: {test_path}")
 
     cmd = [sys.executable, str(test_path), "--config", str(generated_config_path), *forward_args]
-    print(f"[UPJ] Launching simulation: {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=PROJECT_ROOT, check=True)
+    print(f"[ERC Tristable Joint Response] Launching simulation: {' '.join(cmd)}")
+    subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, env=isaac_subprocess_env())
 
 
 def save_plot(path: Path, result, profile) -> None:
@@ -280,7 +261,7 @@ def save_plot(path: Path, result, profile) -> None:
     )
     ax0.set_xlabel("joint angle [deg]")
     ax0.set_ylabel("torque [Nm]")
-    ax0.set_title("Bistable Function Through ERC Repair Pipeline")
+    ax0.set_title("Tristable Function Through ERC Repair Pipeline")
     ax0.grid(True, alpha=0.3)
     ax0.legend()
 
@@ -298,7 +279,7 @@ def save_plot(path: Path, result, profile) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Build a bistable repaired ERC torque table and launch the local "
+            "Build a tristable repaired ERC torque table and launch the local "
             "Isaac Lab joint-response test."
         )
     )
@@ -424,17 +405,20 @@ def main() -> None:
         else float(validation_cfg.get("max_torque_rmse_nm")),
     )
 
-    results_dir = resolve_repo_path(output_cfg.get("results_dir", "results/bistable_erc_example"))
-    table_path = results_dir / str(output_cfg.get("table_csv", "bistable_repaired_torque_table.csv"))
-    plot_path = results_dir / str(output_cfg.get("plot_png", "bistable_repaired_profile.png"))
-    function_path = results_dir / str(output_cfg.get("function_py", "bistable_erc_torque_fn.py"))
-    xyz_path = results_dir / str(output_cfg.get("curve_xyz", "bistable_repaired_cam.xyz"))
-    sldcrv_path = results_dir / str(output_cfg.get("curve_sldcrv", "bistable_repaired_cam.sldcrv"))
-    summary_path = results_dir / str(output_cfg.get("summary_yaml", "bistable_erc_summary.yaml"))
-    isaac_load_path = results_dir / str(output_cfg.get("isaac_load_yaml", "bistable_isaac_load.yaml"))
-    generated_upj_config_path = resolve_repo_path(
+    results_dir = resolve_repo_path(output_cfg.get("results_dir", "results/erc_tristable_joint_response"))
+    table_path = results_dir / str(output_cfg.get("table_csv", "erc_tristable_joint_response_torque_table.csv"))
+    plot_path = results_dir / str(output_cfg.get("plot_png", "erc_tristable_joint_response_profile.png"))
+    function_path = results_dir / str(output_cfg.get("function_py", "erc_tristable_joint_response_torque_fn.py"))
+    xyz_path = results_dir / str(output_cfg.get("curve_xyz", "erc_tristable_joint_response_cam.xyz"))
+    sldcrv_path = results_dir / str(output_cfg.get("curve_sldcrv", "erc_tristable_joint_response_cam.sldcrv"))
+    summary_path = results_dir / str(output_cfg.get("summary_yaml", "erc_tristable_joint_response_summary.yaml"))
+    isaac_load_path = results_dir / str(
+        output_cfg.get("isaac_load_yaml", "erc_tristable_joint_response_isaac_load.yaml")
+    )
+    generated_joint_response_config_path = resolve_repo_path(
         get_simulation_cfg(cfg).get(
-            "generated_config", "results/bistable_erc_example/upj_joint_response_config.yaml"
+            "generated_config",
+            "results/erc_tristable_joint_response/erc_tristable_joint_response_config.yaml",
         )
     )
 
@@ -473,11 +457,11 @@ def main() -> None:
             }
         },
     )
-    build_upj_joint_response_config(
+    build_erc_tristable_joint_response_config(
         cfg=cfg,
         result=result,
         recommended_applied_torque_nm=recommended_applied_torque_nm,
-        generated_config_path=generated_upj_config_path,
+        generated_config_path=generated_joint_response_config_path,
         analytics_fps=args.analytics_fps,
     )
 
@@ -492,14 +476,14 @@ def main() -> None:
                 path.unlink()
 
     if not args.prepare_only:
-        ensure_upj_assets(
+        ensure_joint_response_assets(
             cfg=cfg,
-            generated_config_path=generated_upj_config_path,
+            generated_config_path=generated_joint_response_config_path,
             forward_args=forward_args,
         )
-        run_upj_joint_response(
+        run_erc_tristable_joint_response(
             cfg=cfg,
-            generated_config_path=generated_upj_config_path,
+            generated_config_path=generated_joint_response_config_path,
             forward_args=forward_args,
         )
 
@@ -516,7 +500,7 @@ def main() -> None:
     print(f"SLDCRV curve: {sldcrv_path}")
     print(f"Summary: {summary_path}")
     print(f"Isaac load config: {isaac_load_path}")
-    print(f"UPJ simulation config: {generated_upj_config_path}")
+    print(f"ERC tristable joint-response config: {generated_joint_response_config_path}")
 
 
 if __name__ == "__main__":

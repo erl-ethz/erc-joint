@@ -50,7 +50,7 @@ from erc_design import (
 
 ## Function-Defined Profiles
 
-For bistable or otherwise analytic profiles, the repository exposes:
+For tristable or otherwise analytic profiles, the repository exposes:
 
 ```python
 from erc_design import FunctionTorqueProfileConfig, build_function_profile
@@ -101,7 +101,7 @@ Sign convention note:
 The example script
 
 ```python
-examples/erc_bistable_isaaclab_example.py
+examples/erc_tristable_joint_response_example.py
 ```
 
 does not implement a separate local mock simulator. Instead, it prepares a
@@ -113,7 +113,7 @@ erc_isaac/joint_response.py
 
 Workflow:
 
-1. Build the repaired ERC torque table from the configured bistable function.
+1. Build the repaired ERC torque table from the configured tristable function.
 2. Generate a `joint_response.py` YAML config with `joint_response.mode=piecewise`
    and the repaired ERC table as the piecewise response.
 3. If the required yaw-only USD asset is missing, call:
@@ -135,11 +135,17 @@ this repository's `results/` tree, and the analytics replay uses the same
 playback slow-down as the viewport video. Any remaining unknown CLI options
 are also forwarded.
 
+The analytics use the first arm and include pre/post repair torque profiles,
+pre/post repair cam profiles, and the moving cam contact point. Configure
+legend, axis-label, tick-label, and title sizes under
+`video.analytics_font_sizes`.
+
 After asset generation, the wrapper also recolors the yaw-only USD locally so:
 
-- `arm_segment_1_*` (non-folding / proximal) uses a distinct warm color,
-- `arm_segment_2_*` (folding / distal) uses a distinct green color,
-- `motor_*` uses a separate motor color.
+- the main base is blue,
+- `arm_segment_1_*` (non-folding / proximal) is orange,
+- `arm_segment_2_*` (folding / distal) is yellow,
+- joints are dark gray and motors are green.
 
 ## Local Morphy Example
 
@@ -163,6 +169,10 @@ The local wrapper exposes the main runtime options directly:
 - `--analytics`
 - `--analytics_path`
 - `--analytics_fps`
+- `--analytics_legend_font_size`
+- `--analytics_axes_font_size`
+- `--analytics_tick_font_size`
+- `--analytics_title_font_size`
 - `--camera_eye`
 - `--camera_target`
 - `--results_dir`

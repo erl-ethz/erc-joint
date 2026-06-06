@@ -52,12 +52,11 @@ joint_response:
     # name: sin, cos, tan, expression (custom expression), saturating_dual_stiffness
     # theta is the joint angle in radians (same as joint_pos).
     name: expression
-    # Bistable torque using trig (stable at 0 deg and 50 deg, unstable at 25 deg):
-    # theta1 = 50 deg = 0.8726646 rad
-    # torque(theta) = -k * sin(2*pi*theta/theta1)
-    # expression: "-(sigmoid(10*theta)-0.5)"
-    # expression: "-0.125 * (theta + 0.5 * theta**3 + 0.05 * theta**5)"
+    # Tristable-style symmetric torque profile over the configured angle range:
     expression: "-0.4 * sin(2*pi*theta) -0.1 * tan(theta*0.96)"
+    # Other torque profile examples:
+      # expression: "-(sigmoid(10*theta)-0.5)"
+      # expression: "-0.125 * (theta + 0.5 * theta**3 + 0.05 * theta**5)"
     angle_min: -1.5
     angle_max: 1.5
     offset: 0.0
@@ -89,6 +88,11 @@ video:
   # Optional analytics video (plots). Set to null to disable.
   analytics_path: results/joint_response_analytics.mp4
   analytics_fps: 60
+  analytics_font_sizes:
+    legend: 11
+    axes: 13
+    ticks: 11
+    titles: 15
 
 camera:
   # Top-down, closer view (camera_eye is computed from target, distance, yaw_deg, height)

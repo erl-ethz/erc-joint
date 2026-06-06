@@ -26,9 +26,9 @@ isaac_example:
 
 isaaclab_simulation:
   template_config: configs/joint_response_template.yaml
-  workspace_dir: results/bistable_erc_example/upj_workspace
-  generated_config: results/bistable_erc_example/upj_joint_response_config.yaml
-  simulation_output_dir: results/bistable_erc_example/upj_results
+  workspace_dir: results/erc_tristable_joint_response/workspace
+  generated_config: results/erc_tristable_joint_response/erc_tristable_joint_response_config.yaml
+  simulation_output_dir: results/erc_tristable_joint_response/simulation_results
   convert_if_missing: true
   overrides:
     airframe_generation:
@@ -55,21 +55,34 @@ isaaclab_simulation:
       motor_names: [motor_0, motor_1, motor_2, motor_3]
       torque_directions: [-1.0, 1.0, 1.0, -1.0]
       torque_schedule:
-        - duration: 0.3
+        - duration: 0.05
           scale: 0.0
         - duration: 0.03
           scale: 1.0
-        - duration: 0.3
+        - duration: 0.2
           scale: 0.0
         - duration: 0.03
           scale: -1.0
         - duration: 0.3
           scale: 0.0
+        - duration: 0.03
+          scale: -1.2
+        - duration: 0.2
+          scale: 0.0
+        - duration: 0.03
+          scale: 1.0
+        - duration: 0.2
+          scale: 0.0
     video:
       playback_speed: null
-      path: results/bistable_erc_example/upj_joint_response.mp4
-      analytics_path: results/bistable_erc_example/upj_joint_response_analytics.mp4
+      path: results/erc_tristable_joint_response/erc_tristable_joint_response.mp4
+      analytics_path: results/erc_tristable_joint_response/erc_tristable_joint_response_analytics.mp4
       analytics_fps: 60
+      analytics_font_sizes:
+        legend: 13
+        axes: 14
+        ticks: 13
+        titles: 15
     camera:
       target: [0.05, 0.0, 0.5]
       distance: 0.5315
@@ -77,11 +90,11 @@ isaaclab_simulation:
       height: 0.3
 
 output:
-  results_dir: results/bistable_erc_example
-  table_csv: bistable_repaired_torque_table.csv
-  plot_png: bistable_repaired_profile.png
-  function_py: bistable_erc_torque_fn.py
-  curve_xyz: bistable_repaired_cam.xyz
-  curve_sldcrv: bistable_repaired_cam.sldcrv
-  summary_yaml: bistable_erc_summary.yaml
-  isaac_load_yaml: bistable_isaac_load.yaml
+  results_dir: results/erc_tristable_joint_response
+  table_csv: erc_tristable_joint_response_torque_table.csv
+  plot_png: erc_tristable_joint_response_profile.png
+  function_py: erc_tristable_joint_response_torque_fn.py
+  curve_xyz: erc_tristable_joint_response_cam.xyz
+  curve_sldcrv: erc_tristable_joint_response_cam.sldcrv
+  summary_yaml: erc_tristable_joint_response_summary.yaml
+  isaac_load_yaml: erc_tristable_joint_response_isaac_load.yaml

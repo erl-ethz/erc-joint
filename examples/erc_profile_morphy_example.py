@@ -20,7 +20,7 @@ from pathlib import Path
 from isaaclab.app import AppLauncher
 
 # ── User-configurable defaults (override via CLI or edit here) ────────────────
-DEFAULT_SPRING_ID = "durovis_0.9x6.1x21" # or others in yaml
+DEFAULT_SPRING_ID = "sodemann_41570-316" # or others in yaml
 # ─────────────────────────────────────────────────────────────────────────────
 
 parser = argparse.ArgumentParser(description="ERC torque-profile simulation")
@@ -44,6 +44,10 @@ parser.add_argument("--video", type=float, default=None, metavar="SPEED", help="
 parser.add_argument("--analytics", action="store_true", help="Save animated joint-response analytics video")
 parser.add_argument("--analytics_path", type=str, default=None, help="Override analytics video output path")
 parser.add_argument("--analytics_fps", type=int, default=24, help="FPS for analytics video (lower = fewer frames to render, same playback speed)")
+parser.add_argument("--analytics_legend_font_size", type=float, default=11, help="Analytics legend font size")
+parser.add_argument("--analytics_axes_font_size", type=float, default=13, help="Analytics axis-label font size")
+parser.add_argument("--analytics_tick_font_size", type=float, default=11, help="Analytics tick-label font size")
+parser.add_argument("--analytics_title_font_size", type=float, default=15, help="Analytics panel-title font size")
 parser.add_argument("--camera_eye", type=str, default="0.45,0.35,0.8", help="Viewport camera position as 'x,y,z' (default: 0.45,0.35,0.8)")
 parser.add_argument("--camera_target", type=str, default="0.05,0.0,0.5", help="Viewport camera look-at point as 'x,y,z' (default: 0.05,0.0,0.5)")
 AppLauncher.add_app_launcher_args(parser)
@@ -147,6 +151,10 @@ def save_analytics_video(
     playback_speed: float | None = None,
     dt: float | None = None,
     fps: int = 24,
+    legend_font_size: float = 13,
+    axes_font_size: float = 14,
+    tick_font_size: float = 13,
+    title_font_size: float = 15,
 ) -> None:
     import matplotlib
     matplotlib.use("Agg")
@@ -184,7 +192,7 @@ def save_analytics_video(
     right_cy = np.array([_cam_contact_point(a, right_support_angles, right_cam_mm)[1] for a in right_ang_rad_f])
 
     fig, axes = plt.subplots(2, 2, figsize=(13, 10), constrained_layout=True)
-    fig.suptitle("ERC Joint Response Analytics", fontsize=13)
+    fig.suptitle("ERC Joint Response Analytics", fontsize=title_font_size + 2)
     ax_app, ax_cam = axes[0, 0], axes[0, 1]
     ax_ang, ax_erc = axes[1, 0], axes[1, 1]
 
@@ -196,8 +204,8 @@ def save_analytics_video(
     pad = max(0.01, 0.1 * float(np.max(np.abs(all_app))))
     ax_app.set_ylim(float(np.min(all_app)) - pad, float(np.max(all_app)) + pad)
     ax_app.axhline(0, color="k", lw=0.5, alpha=0.4)
-    ax_app.set_xlabel("time [s]"); ax_app.set_ylabel("torque [Nm]")
-    ax_app.set_title("Applied torque"); ax_app.legend(fontsize=8); ax_app.grid(True, alpha=0.3)
+    ax_app.set_xlabel("time [s]", fontsize=axes_font_size); ax_app.set_ylabel("torque [Nm]", fontsize=axes_font_size)
+    ax_app.set_title("Applied torque", fontsize=title_font_size); ax_app.legend(fontsize=legend_font_size); ax_app.grid(True, alpha=0.3)
 
     # ── [0,1] cam profiles + contact dots ────────────────────────────────────
     if left_pre_repair_cam_mm is not None:
@@ -236,8 +244,15 @@ def save_analytics_video(
     ax_cam.set_xlim(float(np.min(all_cam_xy[:, 0])) - cam_pad, float(np.max(all_cam_xy[:, 0])) + cam_pad)
     ax_cam.set_ylim(float(np.min(all_cam_xy[:, 1])) - cam_pad, float(np.max(all_cam_xy[:, 1])) + cam_pad)
     ax_cam.set_aspect("equal")
-    ax_cam.set_xlabel("x [mm]"); ax_cam.set_ylabel("y [mm]")
-    ax_cam.set_title("Cam profile — contact point"); ax_cam.legend(fontsize=8); ax_cam.grid(True, alpha=0.3)
+    ax_cam.set_xlabel("x [mm]", fontsize=axes_font_size); ax_cam.set_ylabel("y [mm]", fontsize=axes_font_size)
+    ax_cam.set_title("Cam profile — contact point", fontsize=title_font_size)
+    ax_cam.legend(
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        borderaxespad=0.0,
+        fontsize=legend_font_size,
+    )
+    ax_cam.grid(True, alpha=0.3)
 
     # ── [1,0] joint angles ───────────────────────────────────────────────────
     line_lang, = ax_ang.plot([], [], "b-", lw=1.5, label="left")
@@ -247,8 +262,8 @@ def save_analytics_video(
     pad = max(1.0, 0.1 * float(np.max(np.abs(all_ang))))
     ax_ang.set_ylim(float(np.min(all_ang)) - pad, float(np.max(all_ang)) + pad)
     ax_ang.axhline(0, color="k", lw=0.5, alpha=0.4)
-    ax_ang.set_xlabel("time [s]"); ax_ang.set_ylabel("angle [deg]")
-    ax_ang.set_title("Joint angles"); ax_ang.legend(fontsize=8); ax_ang.grid(True, alpha=0.3)
+    ax_ang.set_xlabel("time [s]", fontsize=axes_font_size); ax_ang.set_ylabel("angle [deg]", fontsize=axes_font_size)
+    ax_ang.set_title("Joint angles", fontsize=title_font_size); ax_ang.legend(fontsize=legend_font_size); ax_ang.grid(True, alpha=0.3)
 
     # ── [1,1] ERC torque profile + operating dots ────────────────────────────
     if left_pre_curve_deg is not None:
@@ -289,8 +304,11 @@ def save_analytics_video(
     ax_erc.set_ylim(float(np.min(all_c_nm)) - pad_t,  float(np.max(all_c_nm)) + pad_t)
     ax_erc.axhline(0, color="k", lw=0.5, alpha=0.4)
     ax_erc.axvline(0, color="k", lw=0.5, alpha=0.4)
-    ax_erc.set_xlabel("angle [deg]"); ax_erc.set_ylabel("torque [Nm]")
-    ax_erc.set_title("ERC profile — operating point"); ax_erc.legend(fontsize=8); ax_erc.grid(True, alpha=0.3)
+    ax_erc.set_xlabel("angle [deg]", fontsize=axes_font_size); ax_erc.set_ylabel("torque [Nm]", fontsize=axes_font_size)
+    ax_erc.set_title("ERC profile — operating point", fontsize=title_font_size); ax_erc.legend(fontsize=legend_font_size); ax_erc.grid(True, alpha=0.3)
+
+    for axis in axes.flat:
+        axis.tick_params(axis="both", labelsize=tick_font_size)
 
     def _update(i):
         sl = slice(None, i + 1)
@@ -631,6 +649,10 @@ def main() -> None:
             playback_speed=args_cli.video,
             dt=args_cli.dt,
             fps=args_cli.analytics_fps,
+            legend_font_size=args_cli.analytics_legend_font_size,
+            axes_font_size=args_cli.analytics_axes_font_size,
+            tick_font_size=args_cli.analytics_tick_font_size,
+            title_font_size=args_cli.analytics_title_font_size,
         )
 
     sim.plot_joint_dynamics()

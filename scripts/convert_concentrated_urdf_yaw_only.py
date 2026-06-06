@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
     import os
     import math
-    from pxr import UsdPhysics
+    from pxr import Gf, Sdf, Usd, UsdPhysics, UsdShade
     from isaaclab.sim.converters import UrdfConverter, UrdfConverterCfg
     from isaaclab.sim.spawners.materials import RigidBodyMaterialCfg, spawn_rigid_body_material
     import isaacsim.core.utils.prims as prim_utils
@@ -166,6 +166,71 @@ if __name__ == "__main__":
         norm = os.path.normpath(path)
         parts = [("my_airframe" if p == "myairframe" else p) for p in norm.split(os.sep)]
         return os.sep.join(parts)
+
+    def apply_visual_materials(usd_path: str):
+        """Bind distinct materials to the generated airframe visual prims."""
+        stage = Usd.Stage.Open(usd_path)
+        if stage is None:
+            raise RuntimeError(f"Failed to open USD for material binding: {usd_path}")
+
+        color_rules = {
+            "base_link": (0.05, 0.20, 0.65),
+            "arm_segment_1_": (1.00, 0.15, 0.02),
+            "arm_segment_2_": (1.00, 0.35, 0.02),
+            "dummy_link_yaw_": (0.08, 0.08, 0.08),
+            "motor_": (0.20, 0.65, 0.25),
+        }
+        looks_path = Sdf.Path("/quadrotor/Looks")
+
+        def ensure_material(name: str, color: tuple[float, float, float]):
+            material_path = looks_path.AppendChild(name)
+            shader_path = material_path.AppendChild("PreviewSurface")
+            material = UsdShade.Material.Define(stage, material_path)
+            shader = UsdShade.Shader.Define(stage, shader_path)
+            shader.CreateIdAttr("UsdPreviewSurface")
+            shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
+            shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.4)
+            shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0)
+            material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+            return material
+
+        materials = {
+            key: ensure_material(f"ERC_{key.rstrip('_')}", color)
+            for key, color in color_rules.items()
+        }
+
+        bound_counts = {key: 0 for key in color_rules}
+        for prim in stage.Traverse():
+            path_str = str(prim.GetPath())
+            if not path_str.endswith("/visuals"):
+                continue
+
+            material_key = None
+            material = None
+            if "/base_link/visuals" in path_str:
+                material_key = "base_link"
+            else:
+                for key in ("arm_segment_1_", "arm_segment_2_", "dummy_link_yaw_", "motor_"):
+                    if f"/{key}" in path_str:
+                        material_key = key
+                        break
+            if material_key is None:
+                continue
+            material = materials[material_key]
+
+            UsdShade.MaterialBindingAPI.Apply(prim).Bind(
+                material,
+                bindingStrength=UsdShade.Tokens.strongerThanDescendants,
+            )
+            bound_counts[material_key] += 1
+
+        stage.Save()
+        missing_parts = [key for key, count in bound_counts.items() if count == 0]
+        if missing_parts:
+            raise RuntimeError(
+                f"Missing visual prims for colored parts {missing_parts} in {usd_path}"
+            )
+        print(f"Applied colored materials in {usd_path}: {bound_counts}")
 
     def generate_parametric_urdf(output_path, params):
         """Generate a yaw-only parametric URDF based on input parameters."""
@@ -419,7 +484,6 @@ if __name__ == "__main__":
     def main():
         """Convert the yaw-only concentrated quadrotor URDF to USD."""
         script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        urdf_path = os.path.join(script_dir, "src/concentrated_quadrotor_yaw_only.urdf")
 
         if args_cli.output_dir:
             output_dir = os.path.abspath(args_cli.output_dir)
@@ -431,6 +495,7 @@ if __name__ == "__main__":
         output_dir = normalized_output_dir
 
         os.makedirs(output_dir, exist_ok=True)
+        urdf_path = os.path.join(output_dir, "concentrated_quadrotor_yaw_only.urdf")
 
         print(f"\n{'='*80}")
         print("Converting Yaw-Only Concentrated Quadrotor")
@@ -466,8 +531,28 @@ if __name__ == "__main__":
         print("Conversion complete!")
         print(f"USD file saved to: {output_path}")
 
+        expected_usd_path = os.path.join(output_dir, "concentrated_quadrotor_yaw_only.usd")
+        if not os.path.isfile(output_path):
+            raise FileNotFoundError(
+                "UrdfConverter returned without writing its reported USD path: "
+                f"{output_path}"
+            )
+        if os.path.abspath(output_path) != expected_usd_path:
+            raise RuntimeError(
+                "UrdfConverter wrote the root USD to an unexpected path. "
+                f"Expected {expected_usd_path}, got {output_path}"
+            )
+
         save_airframe_data(output_dir, output_path, params)
+        apply_visual_materials(output_path)
+        expected_json_path = os.path.join(output_dir, "airframe_data.json")
+        if not os.path.isfile(expected_json_path):
+            raise FileNotFoundError(
+                f"Airframe extraction did not write the expected JSON: {expected_json_path}"
+            )
         print(f"\n{'='*80}\n")
 
-    main()
-    simulation_app.close()
+    try:
+        main()
+    finally:
+        simulation_app.close()

@@ -159,22 +159,24 @@ This GUI lets you:
 - inspect repaired vs. unrepaired cam geometry,
 - export `.sldcrv` and `.xyz` curves.
 
-Function-defined bistable Isaac wrapper:
+Function-defined ERC tristable joint-response wrapper:
 
 ```bash
-python3 examples/erc_bistable_isaaclab_example.py --headless
+python3 examples/erc_tristable_joint_response_example.py --headless
 ```
 
 This example:
 
-- builds a bistable function-defined ERC profile,
+- builds a tristable function-defined ERC profile,
 - runs ERC scaling and convexity repair,
 - writes repaired torque tables and CAD-oriented cam exports,
 - generates a local config for [`erc_isaac/joint_response.py`](erc_isaac/joint_response.py),
 - calls [`scripts/convert_concentrated_urdf_yaw_only.py`](scripts/convert_concentrated_urdf_yaw_only.py) if the yaw-only USD is missing,
-- recolors the resulting asset so non-folding arms, folding arms, and motors are easier to distinguish,
+- recolors the resulting asset with a blue base, orange proximal arms, cyan distal arms, dark joints, and green motors,
 - keeps generated videos and analytics outputs under this repository's `results/` tree,
 - exposes `--headless`, `--video`, `--analytics`, `--analytics_path`, and `--analytics_fps`,
+- renders first-arm analytics with pre/post repair torque profiles, pre/post repair cam profiles, and the moving cam contact point,
+- controls analytics legend, axis-label, tick-label, and title sizes through `video.analytics_font_sizes`,
 - uses the same playback slow-down for analytics replay as for viewport video, matching the Morphy example behavior.
 
 Point-wise repaired-profile wrapper:
@@ -191,6 +193,10 @@ options locally:
 - `--analytics`
 - `--analytics_path`
 - `--analytics_fps`
+- `--analytics_legend_font_size`
+- `--analytics_axes_font_size`
+- `--analytics_tick_font_size`
+- `--analytics_title_font_size`
 - `--camera_eye`
 - `--camera_target`
 - `--results_dir`
