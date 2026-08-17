@@ -19,17 +19,38 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 
-"""DEFAULT_POINTS_DEG_NM = [    # for programmable morphy gap traversal test
+"""
+DEFAULT_POINTS_DEG_NM = [    # for programmable morphy gap traversal test
+    (-1.0, -0.40),
+    (0.0,0.0),
+    (0.5, 0.119),
+    (37.5, 0.004),
+    (70.00, 0.004),
+    (72.25, 0.047),
+    (73.30, 0.4),
+]
+DEFAULT_POINTS_DEG_NM = [    # for programmable morphy gap traversal test
+    (-1.08, -0.40),
+    (0.0,0.0),
+    (1.0, 0.074),
+    (15.75, 0.012),
+    (60.25, 0.011),
+    (72.25, 0.041),
+    (73.40, 0.4),
+]
+
+
+DEFAULT_POINTS_DEG_NM = [    # for programmable morphy gap traversal test
     (-0.25, -0.25),
     (0.10, 0.10),
     (30.0, 0.0),
     (76.0, 0.0),
     (78.0, 0.2),
-]"""
-
-THRESHOLD = 0.05
+]
+"""
+THRESHOLD = 0.04
 THRESHOLD_ANGLE_START_DEG = 0.1
-THRESHOLD_ANGLE_END_DEG = 12.0
+THRESHOLD_ANGLE_END_DEG = 15.0
 DEFAULT_POINTS_DEG_NM = [   # for stable around zero and then zero torque
     (-90.0, -THRESHOLD), 
     (-88.0, 0.0),

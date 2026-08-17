@@ -71,6 +71,18 @@ springs:
     maximum_load_n: 37.70
     spring_constant_n_per_m: 3.92e3
     count: 1
+  - id: sodemann_31420
+    description: Spring from Sodemann 31420 https://www.industrial-springs.com/31420; d = 0.9 mm, D_e = 4.5 mm, L_0 = 14.2 mm, Music wire
+    material: stainless steel 316
+    wire_diameter_m: 0.9e-3
+    external_diameter_m: 4.5e-3
+    free_length_m: 14.2e-3
+    max_length_m: 17.15e-3
+    max_extension_m: 2.95e-3
+    tension_at_rest_n: 7.52
+    maximum_load_n: 49.7
+    spring_constant_n_per_m: 14.3e3
+    count: 1
   - id: durovis_0.5x3.5x15.2_C
     description: Spring from Durovis 0.5x3.5x15.2_C https://www.durovis.ch/en/05-1-1.html; d = 0.5 mm, D_e = 3.5 mm, L_0 = 15.2 mm, steel grade C
     material: steel grade C
